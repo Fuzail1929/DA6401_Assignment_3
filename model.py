@@ -213,9 +213,9 @@ class Transformer(nn.Module):
         src_vocab_size: int = 8000,
         tgt_vocab_size: int = 8000,
         d_model:   int   = 256,
-        N:         int   = 3,
+        N:         int   = 4,
         num_heads: int   = 8,
-        d_ff:      int   = 512,
+        d_ff:      int   = 1024,
         dropout:   float = 0.1,
         weights_gdrive_id: str = "1-HzSGF4_Fzk_ARqIfjTekl7W4gLEOmCs",   # Google Drive file ID for checkpoint
         device: str = None,
@@ -260,7 +260,7 @@ class Transformer(nn.Module):
             self._spacy_de = spacy.load("de_core_news_sm")
         except OSError:
             import subprocess
-            subprocess.run(["python", "-m", "spacy", "download", "de_core_news_sm"],
+            subprocess.run(["python3", "-m", "spacy", "download", "de_core_news_sm"],
                            check=True)
             self._spacy_de = spacy.load("de_core_news_sm")
 
@@ -268,7 +268,7 @@ class Transformer(nn.Module):
             self._spacy_en = spacy.load("en_core_web_sm")
         except OSError:
             import subprocess
-            subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"],
+            subprocess.run(["python3", "-m", "spacy", "download", "en_core_web_sm"],
                            check=True)
             self._spacy_en = spacy.load("en_core_web_sm")
 
