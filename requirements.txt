@@ -4,5 +4,7 @@ matplotlib
 scikit-learn
 wandb
 datasets
-spacy
+spacy==3.7.6
 tqdm
+nltk
+gdown
