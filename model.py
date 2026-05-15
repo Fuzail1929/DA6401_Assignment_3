@@ -12,10 +12,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  SCALED DOT-PRODUCT ATTENTION
-# ══════════════════════════════════════════════════════════════════════
 
+#  SCALED DOT-PRODUCT ATTENTION
 def scaled_dot_product_attention(
     Q: torch.Tensor,
     K: torch.Tensor,
@@ -33,32 +31,33 @@ def scaled_dot_product_attention(
     return output, attn_w
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  MASK HELPERS
-# ══════════════════════════════════════════════════════════════════════
 
+#  MASK HELPERS
 def make_src_mask(src: torch.Tensor, pad_idx: int = 1) -> torch.Tensor:
     # [batch, 1, 1, src_len]  True = PAD
     return (src == pad_idx).unsqueeze(1).unsqueeze(2)
 
 
+
 def make_tgt_mask(tgt: torch.Tensor, pad_idx: int = 1) -> torch.Tensor:
     tgt_len = tgt.size(1)
+
     # Padding mask [batch, 1, 1, tgt_len]
     pad_mask = (tgt == pad_idx).unsqueeze(1).unsqueeze(2)
+
     # Causal mask [1, 1, tgt_len, tgt_len]
     causal_mask = torch.triu(
         torch.ones(tgt_len, tgt_len, device=tgt.device), diagonal=1
     ).bool().unsqueeze(0).unsqueeze(0)
+
     # Combine: [batch, 1, tgt_len, tgt_len]
     return pad_mask | causal_mask
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  MULTI-HEAD ATTENTION
-# ══════════════════════════════════════════════════════════════════════
 
+#  MULTI-HEAD ATTENTION
 class MultiHeadAttention(nn.Module):
+    # Constructor 
     def __init__(self, d_model: int, num_heads: int, dropout: float = 0.1) -> None:
         super().__init__()
         assert d_model % num_heads == 0
@@ -72,6 +71,7 @@ class MultiHeadAttention(nn.Module):
         self.W_o = nn.Linear(d_model, d_model)
         self.dropout = nn.Dropout(p=dropout)
 
+    # Forward pass
     def forward(
         self,
         query: torch.Tensor,
@@ -94,20 +94,21 @@ class MultiHeadAttention(nn.Module):
         return self.W_o(out)
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  POSITIONAL ENCODING
-# ══════════════════════════════════════════════════════════════════════
 
+#  POSITIONAL ENCODING
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000) -> None:
+        # Note: max_len is set to 5000 by default, but can be adjusted as needed.
         super().__init__()
         self.dropout = nn.Dropout(p=dropout)
 
         pe = torch.zeros(max_len, d_model)
+
         position = torch.arange(0, max_len).unsqueeze(1).float()
         div_term = torch.exp(
             torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model)
         )
+
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
         pe = pe.unsqueeze(0)  # [1, max_len, d_model]
@@ -118,10 +119,8 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x)
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  FEED-FORWARD NETWORK
-# ══════════════════════════════════════════════════════════════════════
 
+#  FEED-FORWARD NETWORK
 class PositionwiseFeedForward(nn.Module):
     def __init__(self, d_model: int, d_ff: int, dropout: float = 0.1) -> None:
         super().__init__()
@@ -133,10 +132,8 @@ class PositionwiseFeedForward(nn.Module):
         return self.linear2(self.dropout(F.relu(self.linear1(x))))
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  ENCODER LAYER
-# ══════════════════════════════════════════════════════════════════════
 
+#  ENCODER LAYER
 class EncoderLayer(nn.Module):
     def __init__(self, d_model: int, num_heads: int, d_ff: int, dropout: float = 0.1) -> None:
         super().__init__()
@@ -153,12 +150,11 @@ class EncoderLayer(nn.Module):
         return x
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  DECODER LAYER
-# ══════════════════════════════════════════════════════════════════════
 
+#  DECODER LAYER
 class DecoderLayer(nn.Module):
     def __init__(self, d_model: int, num_heads: int, d_ff: int, dropout: float = 0.1) -> None:
+        # Note: dropout is applied after each sub-layer, as per the original paper.
         super().__init__()
         self.self_attn  = MultiHeadAttention(d_model, num_heads, dropout)
         self.cross_attn = MultiHeadAttention(d_model, num_heads, dropout)
@@ -168,6 +164,7 @@ class DecoderLayer(nn.Module):
         self.norm3      = nn.LayerNorm(d_model)
         self.dropout    = nn.Dropout(p=dropout)
 
+    # Forward pass
     def forward(self, x, memory, src_mask, tgt_mask):
         x = self.norm1(x + self.dropout(self.self_attn(x, x, x, tgt_mask)))
         x = self.norm2(x + self.dropout(self.cross_attn(x, memory, memory, src_mask)))
@@ -175,10 +172,7 @@ class DecoderLayer(nn.Module):
         return x
 
 
-# ══════════════════════════════════════════════════════════════════════
 #  ENCODER & DECODER STACKS
-# ══════════════════════════════════════════════════════════════════════
-
 class Encoder(nn.Module):
     def __init__(self, layer: EncoderLayer, N: int) -> None:
         super().__init__()
@@ -203,10 +197,8 @@ class Decoder(nn.Module):
         return self.norm(x)
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  FULL TRANSFORMER
-# ══════════════════════════════════════════════════════════════════════
 
+#  FULL TRANSFORMER
 class Transformer(nn.Module):
     def __init__(
         self,
@@ -224,8 +216,9 @@ class Transformer(nn.Module):
         self.d_model = d_model
         self.device  = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
-        # ── build architecture first with placeholder sizes ──────────────
+        # build architecture first with placeholder sizes 
         # Real vocab sizes are set after loading checkpoint/vocab
+
         self._src_vocab_size = src_vocab_size
         self._tgt_vocab_size = tgt_vocab_size
 
@@ -242,15 +235,16 @@ class Transformer(nn.Module):
 
         self._init_weights()
 
-        # ── load tokenizers ──────────────────────────────────────────────
+        #  load tokenizers for inference (and to ensure they're available for training if needed)
         self._load_tokenizers()
 
-        # ── load vocab & weights from checkpoint ─────────────────────────
+        # ── load vocab & weights from checkpoint (if provided) 
         if weights_gdrive_id is not None:
             self._download_and_load(weights_gdrive_id)
         # Note: do NOT auto-load checkpoint.pt here — training handles that
 
         self.to(self.device)
+
 
     # ------------------------------------------------------------------
     def _load_tokenizers(self):
@@ -272,6 +266,8 @@ class Transformer(nn.Module):
                            check=True)
             self._spacy_en = spacy.load("en_core_web_sm")
 
+
+
     # ------------------------------------------------------------------
     def _download_and_load(self, gdrive_id: str):
         """Download checkpoint from Google Drive using gdown, then load."""
@@ -289,6 +285,8 @@ class Transformer(nn.Module):
             gdown.download(url, ckpt_path, quiet=False)
 
         self._load_local(ckpt_path)
+
+
 
     # ------------------------------------------------------------------
     def _load_local(self, path: str):
@@ -341,13 +339,12 @@ class Transformer(nn.Module):
     def infer(self, german_sentence: str, max_len: int = 100) -> str:
         """
         End-to-end German → English translation.
-
+        
         Args:
             german_sentence : Raw German string.
-            max_len         : Maximum output tokens.
+                max_len     : Maximum output tokens.
 
-        Returns:
-            Translated English string.
+        Returns: Translated English string.
         """
         self.eval()
 

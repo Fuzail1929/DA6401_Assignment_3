@@ -16,7 +16,8 @@ UNK_IDX, PAD_IDX, SOS_IDX, EOS_IDX = 0, 1, 2, 3
 
 
 class Vocab:
-    """Simple vocabulary class."""
+    # Simple vocabulary class
+
     def __init__(self, stoi, itos):
         self.stoi = stoi  # str -> int
         self.itos = itos  # int -> str
@@ -66,6 +67,7 @@ class Multi30kDataset(Dataset):
         else:
             self.src_data = src_data
             self.tgt_data = tgt_data
+
 
     def tokenize_de(self, text):
         return [tok.text.lower() for tok in self.spacy_de.tokenizer(text)]
@@ -122,10 +124,10 @@ def collate_fn(batch, pad_idx=PAD_IDX):
 
 
 def build_datasets(min_freq=2):
-    """
-    Build train/val/test datasets sharing the same vocabulary.
-    Returns: train_ds, val_ds, test_ds, src_vocab, tgt_vocab
-    """
+    
+   #  Build train/val/test datasets sharing the same vocabulary.
+   #  Returns: train_ds, val_ds, test_ds, src_vocab, tgt_vocab
+   
     train_ds = Multi30kDataset(split='train')
     src_vocab = train_ds.src_vocab
     tgt_vocab = train_ds.tgt_vocab

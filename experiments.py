@@ -41,10 +41,7 @@ from train import run_epoch, LabelSmoothingLoss, evaluate_bleu, save_checkpoint
 from dataset import build_datasets, collate_fn, PAD_IDX
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  SHARED CONFIG
-# ══════════════════════════════════════════════════════════════════════
-
+#  SHARED CONFIGURATION FOR ALL EXPERIMENTS
 BASE_CONFIG = {
     "d_model":      256,
     "N":            4,
@@ -59,7 +56,7 @@ BASE_CONFIG = {
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# ── Plot style ───────────────────────────────────────────────────────
+# Plot style 
 plt.rcParams.update({
     "figure.facecolor": "white",
     "axes.facecolor":   "white",
@@ -81,9 +78,9 @@ COLORS = {
 }
 
 
-# ══════════════════════════════════════════════════════════════════════
+
 #  HELPERS
-# ══════════════════════════════════════════════════════════════════════
+
 
 def get_dataloaders(batch_size):
     train_ds, val_ds, test_ds, src_vocab, tgt_vocab = build_datasets()
@@ -109,10 +106,9 @@ def build_model(src_vocab, tgt_vocab, config):
     ).to(DEVICE)
 
 
-# ══════════════════════════════════════════════════════════════════════
+
 #  2.1  NOAM vs FIXED LR
 #  Deliverable: overlay TRAINING LOSS + VALIDATION BLEU curves
-# ══════════════════════════════════════════════════════════════════════
 
 def exp_2_1():
     print("\n=== Experiment 2.1: Noam vs Fixed LR ===")
@@ -205,7 +201,7 @@ def exp_2_1():
         all_lrs[mode]          = lrs
         wandb.finish()
 
-    # ── Overlay Plot ──────────────────────────────────────────────────
+    # Overlay Plot 
     epochs = range(1, config["num_epochs"] + 1)
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
     fig.suptitle("Experiment 2.1: Noam Scheduler vs Fixed Learning Rate",
@@ -236,10 +232,9 @@ def exp_2_1():
     print("  Saved exp_2_1_overlay.png")
 
 
-# ══════════════════════════════════════════════════════════════════════
+
 #  2.2  SCALING FACTOR ABLATION
 #  Deliverable: Q/K grad norms first 1000 steps + train/val loss
-# ══════════════════════════════════════════════════════════════════════
 
 def scaled_dot_product_NO_SCALE(Q, K, V, mask=None):
     """Attention WITHOUT the 1/sqrt(dk) scaling."""
@@ -252,6 +247,8 @@ def scaled_dot_product_NO_SCALE(Q, K, V, mask=None):
 
 
 class MultiHeadAttentionNoScale(nn.Module):
+    # Same as regular MHA but uses scaled_dot_product_NO_SCALE internally
+
     def __init__(self, d_model, num_heads, dropout=0.1):
         super().__init__()
         assert d_model % num_heads == 0
@@ -326,6 +323,7 @@ def exp_2_2():
             reinit=True,
         )
 
+
         model = build_model(src_vocab, tgt_vocab, config) if mode == "with_scale" \
                 else build_noscale_model(src_vocab, tgt_vocab, config)
 
@@ -333,6 +331,7 @@ def exp_2_2():
         optimizer = torch.optim.Adam(model.parameters(),
                                      lr=1.0, betas=(0.9, 0.98), eps=1e-9)
         scheduler = NoamScheduler(optimizer, config["d_model"], config["warmup_steps"])
+
 
         # Phase 1: log Q/K grad norms for first 1000 steps
         # One epoch = ~226 batches (29000/128), so loop multiple epochs
@@ -385,7 +384,7 @@ def exp_2_2():
 
         wandb.finish()
 
-    # ── Plots ─────────────────────────────────────────────────────────
+    # Plots 
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
     fig.suptitle("Experiment 2.2: Scaling Factor 1/√dk Ablation",
                  fontsize=14, fontweight="bold", y=1.02)
@@ -421,10 +420,9 @@ def exp_2_2():
     print("  Saved exp_2_2_scaling_ablation.png")
 
 
-# ══════════════════════════════════════════════════════════════════════
+
 #  2.3  ATTENTION ROLLOUT & HEAD SPECIALIZATION
 #  Deliverable: beautiful per-head heatmaps + entropy analysis
-# ══════════════════════════════════════════════════════════════════════
 
 class MultiHeadAttentionWithWeights(nn.Module):
     """MHA that captures attention weights after each forward pass."""
@@ -451,7 +449,8 @@ class MultiHeadAttentionWithWeights(nn.Module):
 
 
 def _clean_tokens(tokens):
-    """Replace special tokens with readable symbols."""
+   # Replace special tokens with readable symbols
+
     replacements = {"<sos>": "⟨S⟩", "<eos>": "⟨E⟩",
                     "<pad>": "⟨P⟩", "<unk>": "⟨?⟩"}
     return [replacements.get(t, t) for t in tokens]
@@ -484,7 +483,7 @@ def exp_2_3():
             run_epoch(train_loader, model, loss_fn, opt, sch,
                       ep, is_train=True, device=DEVICE)
 
-    # ── Hook attention weights in last encoder layer ───────────────────
+    # Hook attention weights in last encoder layer 
     last_enc = model.encoder.layers[-1]
     mha_vis  = MultiHeadAttentionWithWeights(
         config["d_model"], config["num_heads"], config["dropout"]
@@ -492,7 +491,7 @@ def exp_2_3():
     mha_vis.load_state_dict(last_enc.self_attn.state_dict())
     last_enc.self_attn = mha_vis
 
-    # ── Pick a good sample (8-18 real tokens, not too padded) ──────────
+    # Pick a good sample (8-18 real tokens, not too padded) 
     model.eval()
     chosen_src, chosen_tokens = None, None
     for src_batch, _ in val_loader:
@@ -523,7 +522,8 @@ def exp_2_3():
     display_tokens = _clean_tokens(chosen_tokens[:seq_len])
     n_tok = len(display_tokens)
 
-    # ── Per-head entropy ──────────────────────────────────────────────
+    #  Per-head entropy analysis to classify head behaviour
+
     entropies = []
     for h in range(num_heads):
         w      = attn_weights[0, h, :n_tok, :n_tok].numpy()
@@ -531,7 +531,8 @@ def exp_2_3():
         ent    = -(w_safe * np.log(w_safe)).sum(axis=-1).mean()
         entropies.append(ent)
 
-    # ── Main heatmap figure ───────────────────────────────────────────
+
+    #  Main heatmap figure 
     ncols = 4
     nrows = math.ceil(num_heads / ncols)
     fig   = plt.figure(figsize=(ncols * 5, nrows * 5 + 1.5))
@@ -605,7 +606,7 @@ def exp_2_3():
                 bbox_inches="tight", facecolor=fig.get_facecolor())
     print("  Saved exp_2_3_attention_heads.png")
 
-    # ── Entropy bar chart ─────────────────────────────────────────────
+    # Entropy bar chart 
     fig2, ax2 = plt.subplots(figsize=(10, 4))
     fig2.patch.set_facecolor("#0F1117")
     ax2.set_facecolor("#1A1A2E")
@@ -627,7 +628,7 @@ def exp_2_3():
                 bbox_inches="tight", facecolor=fig2.get_facecolor())
     print("  Saved exp_2_3_entropy.png")
 
-    # ── Log everything to W&B ─────────────────────────────────────────
+    # Log everything to W&B 
     wandb.init(project="da6401-a3", name="2.3-attention-heads",
                config=config, reinit=True)
     wandb.log({
@@ -638,10 +639,9 @@ def exp_2_3():
     wandb.finish()
 
 
-# ══════════════════════════════════════════════════════════════════════
+
 #  2.4  SINUSOIDAL PE vs LEARNED EMBEDDINGS
 #  Deliverable: val BLEU comparison + training curves
-# ══════════════════════════════════════════════════════════════════════
 
 class LearnedPositionalEmbedding(nn.Module):
     """Learned positional embedding via torch.nn.Embedding."""
@@ -682,6 +682,7 @@ def exp_2_4():
             reinit=True,
         )
 
+
         model = build_model(src_vocab, tgt_vocab, config) if mode == "sinusoidal" \
                 else build_learned_pe_model(src_vocab, tgt_vocab, config)
 
@@ -711,7 +712,8 @@ def exp_2_4():
         print(f"  [2.4-{mode}] Test BLEU: {test_bleu:.2f}")
         wandb.finish()
 
-    # ── Plots ─────────────────────────────────────────────────────────
+
+    # Plots 
     epochs = range(1, config["num_epochs"] + 1)
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
     fig.suptitle("Experiment 2.4: Sinusoidal PE vs Learned Positional Embeddings",
@@ -745,10 +747,9 @@ def exp_2_4():
     print("  Saved exp_2_4_pe_comparison.png")
 
 
-# ══════════════════════════════════════════════════════════════════════
+
 #  2.5  LABEL SMOOTHING vs CROSS-ENTROPY
 #  Deliverable: prediction confidence (softmax prob of CORRECT token)
-# ══════════════════════════════════════════════════════════════════════
 
 def exp_2_5():
     print("\n=== Experiment 2.5: Label Smoothing vs Cross-Entropy ===")
@@ -838,7 +839,7 @@ def exp_2_5():
         print(f"  [2.5-{mode}] Test BLEU: {test_bleu:.2f}")
         wandb.finish()
 
-    # ── Plots ─────────────────────────────────────────────────────────
+    # ── Plots 
     epochs = range(1, config["num_epochs"] + 1)
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
     fig.suptitle("Experiment 2.5: Label Smoothing vs Cross-Entropy",
@@ -877,10 +878,7 @@ def exp_2_5():
     print("  Saved exp_2_5_label_smoothing.png")
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  MAIN
-# ══════════════════════════════════════════════════════════════════════
-
+#  MAIN function to run experiments
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--exp", type=str, default="all",

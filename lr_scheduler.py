@@ -1,6 +1,6 @@
 """
 Noam Learning Rate Scheduler
-Reference: "Attention Is All You Need" (Vaswani et al., 2017)
+Reference Paper : "Attention Is All You Need" (Vaswani et al., 2017)
            https://arxiv.org/abs/1706.03762
 
 Formula:
@@ -13,10 +13,10 @@ from torch.optim.lr_scheduler import LRScheduler
 
 
 class NoamScheduler(LRScheduler):
-    """
-    Noam learning rate scheduler as described in "Attention Is All You Need".
-    """
-
+    
+    # Noam learning rate scheduler as described in "Attention Is All You Need".
+    
+    # Constructor takes the optimizer, model dimension (d_model), warmup steps, and last epoch.
     def __init__(
         self,
         optimizer: optim.Optimizer,
@@ -40,9 +40,8 @@ class NoamScheduler(LRScheduler):
         return [base_lr * scale for base_lr in self.base_lrs]
 
 
-# ──────────────────────────────────────────────────────────────────────
-# Helper — do NOT modify
-# ──────────────────────────────────────────────────────────────────────
+
+# Helper function to visualize the learning rate schedule
 
 def get_lr_history(
     d_model: int,
